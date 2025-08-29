@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Telegram Proxy Explorer — MTProto & SOCKS5</title>
+  <meta name="description" content="Fetch and browse public Telegram proxies (MTProto & SOCKS5) from mtpro.xyz. One‑click connect, copy link, and QR code — all client‑side." />
+  <style>
+    /* ---- Minimal, clean styling for GitHub Pages deployment ---- */
+    :root{
+      --bg:#0b1020; --card:#121831; --muted:#8ea0c6; --text:#e9efff; --accent:#4aa3ff; --good:#12d47d; --warn:#ffc857; --bad:#ff6b6b;
+      --shadow: 0 10px 30px rgba(0,0,0,.35);
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Ubuntu,Arial,sans-serif;background:radial-gradient(1200px 600px at 10% -10%,#142047 0%,transparent 60%),radial-gradient(1000px 800px at 120% 10%,#0d1a36 0%,transparent 50%),var(--bg);color:var(--text)}
+    header{position:sticky;top:0;z-index:5;background:linear-gradient(180deg,rgba(11,16,32,.95),rgba(11,16,32,.85));backdrop-filter:blur(8px);border-bottom:1px solid #22325f}
+    .wrap{max-width:1100px;margin:auto;padding:18px 16px}
+    h1{margin:0 0 10px;font-weight:800;letter-spacing:.2px}
+    .sub{color:var(--muted);font-size:.95rem}
+    .controls{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+    .pill{border:1px solid #2a3f74;background:#0f1530;color:var(--text);padding:9px 12px;border-radius:999px;cursor:pointer;transition:.2s;display:inline-flex;align-items:center;gap:8px}
+    .pill[aria-pressed="true"], .pill:hover{background:#182245;border-color:#3a5aa0}
+    .search{flex:1;min-width:220px}
+    input[type="search"], select{width:100%;background:#0f1530;color:var(--text);border:1px solid #2a3f74;border-radius:10px;padding:11px 12px;outline:none}
+    button.primary{background:linear-gradient(180deg,#3aa3ff,#2a85ef);border:none;color:white;border-radius:999px;padding:10px 14px;cursor:pointer;box-shadow:var(--shadow)}
+    button.ghost{background:#101633;border:1px solid #2a3f74;color:#d6e4ff;border-radius:9px;padding:8px 10px;cursor:pointer}
+
+    main{max-width:1100px;margin:10px auto 80px;padding:0 16px}
+    .grid{display:grid;grid-template-columns:repeat(1,1fr);gap:14px}
+    @media (min-width:680px){.grid{grid-template-columns:repeat(2,1fr)}}
+    @media (min-width:980px){.grid{grid-template-columns:repeat(3,1fr)}}
+
+    .card{background:linear-gradient(180deg,#121a37,#0d1330);border:1px solid #22325f;border-radius:18px;padding:14px;box-shadow:var(--shadow)}
+    .card .row{display:flex;align-items:center;justify-content:space-between;gap:8px}
+    .meta{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;margin-top:10px}
+    .label{color:#9eb2df;font-size:.8rem}
+    .val{font-weight:600}
+    .bad{color:var(--bad)}.ok{color:var(--warn)}.good{color:var(--good)}
+
+    .btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .btn{flex:1;min-width:90px;text-align:center;padding:9px 10px;border-radius:12px;border:1px solid #29457f;background:#122046;color:#e9f2ff;cursor:pointer;user-select:none}
+    .btn:hover{filter:brightness(1.08)}
+    .btn.copy{background:#101a3a}
+    .btn.connect{background:linear-gradient(180deg,#2db379,#1b8e5b);border-color:#1d6e52}
+    .btn.qr{background:#0f275c;border-color:#1d3d8e}
+
+    .hint{color:var(--muted);font-size:.8rem;margin-top:6px}
+
+    .empty{opacity:.7;text-align:center;padding:40px 10px;border:1px dashed #274071;border-radius:16px}
+
+    dialog#qr{border:none;border-radius:14px;padding:0;background:#0b122c;color:#e8f1ff;max-width:min(92vw,520px)}
+    .qrh{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;border-bottom:1px solid #24407b;background:#0f1a38;border-top-left-radius:14px;border-top-right-radius:14px}
+    .qrb{padding:16px}
+    canvas#qrc{display:block;margin:auto;border-radius:10px;background:#fff}
+    .qrfoot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:12px}
+    .close{background:#0f1530;border:1px solid #2a3f74;color:#d6e4ff;border-radius:9px;padding:8px 10px;cursor:pointer}
+
+    footer{max-width:1100px;margin:40px auto;padding:0 16px;color:#98a7cd}
+    a{color:#9cc7ff}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>Telegram Proxy Explorer</h1>
+      <div class="sub">Public MTProto & SOCKS5 proxies from <code>mtpro.xyz</code>. Client‑side only. No external QR service.</div>
+      <div class="controls">
+        <button class="pill" id="tab-mtproto" aria-pressed="true">MTProto</button>
+        <button class="pill" id="tab-socks" aria-pressed="false">SOCKS5</button>
+        <div class="search"><input id="q" type="search" placeholder="Filter by country code, provider, host/IP… (e.g. US, AMAZON)"/></div>
+        <select id="sort">
+          <option value="ping">Sort: Lowest ping</option>
+          <option value="uptime">Sort: Highest uptime</option>
+          <option value="recent">Sort: Recently added</option>
+        </select>
+        <button class="pill" id="refresh">Refresh</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div id="status" class="wrap hint">Loading…</div>
+    <div id="grid" class="grid"></div>
+  </main>
+
+  <dialog id="qr">
+    <div class="qrh">
+      <div id="qrtitle" style="font-weight:700">QR Code</div>
+      <button id="qrclose" class="close">Close</button>
+    </div>
+    <div class="qrb">
+      <canvas id="qrc" width="320" height="320"></canvas>
+      <div class="qrfoot">
+        <div class="hint" id="qrhint"></div>
+        <button class="ghost" id="qrcopy">Copy link</button>
+      </div>
+    </div>
+  </dialog>
+
+  <footer>
+    <p>Source API: <a href="https://mtpro.xyz/api-overview" target="_blank" rel="noopener">mtpro.xyz / API Overview</a> • Mirror JSON: <a href="https://github.com/hookzof/socks5_list" target="_blank" rel="noopener">hookzof/socks5_list</a></p>
+    <p class="hint">Security note: These are public proxies. Only use sources you trust. Links use official Telegram deep‑link formats (<code>tg://</code> and <code>t.me</code>).</p>
+  </footer>
+
+  <script>
+    // --------------- Helper utilities (all comments are in English as requested) ---------------
+    const $ = sel => document.querySelector(sel);
+    const statusEl = $('#status');
+    const gridEl = $('#grid');
+    const tabMt = $('#tab-mtproto');
+    const tabSocks = $('#tab-socks');
+    const qInput = $('#q');
+    const sortSel = $('#sort');
+
+    const API = {
+      mtproto: [
+        'https://mtpro.xyz/api/?type=mtproto',
+        // Mirrors (raw GitHub)
+        'https://raw.githubusercontent.com/hookzof/socks5_list/master/tg/mtproto.json'
+      ],
+      socks: [
+        'https://mtpro.xyz/api/?type=socks',
+        'https://raw.githubusercontent.com/hookzof/socks5_list/master/tg/socks.json'
+      ]
+    };
+
+    const telemetry = {
+      // Simple in‑memory counters for UX hints
+      usedMirror: false,
+      lastType: 'mtproto'
+    };
+
+    function toFlagEmoji(cc){
+      // Convert ISO country code (e.g. 'US') to flag emoji
+      if(!cc || cc.length !== 2) return '🏳️';
+      const A = 0x1F1E6; // Regional Indicator Symbol A
+      return String.fromCodePoint(A + (cc.toUpperCase().charCodeAt(0)-65)) +
+             String.fromCodePoint(A + (cc.toUpperCase().charCodeAt(1)-65));
+    }
+
+    function formatMs(ms){
+      return ms < 1000 ? ms + ' ms' : (ms/1000).toFixed(1) + ' s';
+    }
+
+    function tsAgo(unix){
+      if(!unix) return '—';
+      const sec = Math.max(0, Math.floor(Date.now()/1000 - unix));
+      if(sec < 60) return sec + 's ago';
+      const m = Math.floor(sec/60); if(m<60) return m + 'm ago';
+      const h = Math.floor(m/60); if(h<24) return h + 'h ago';
+      const d = Math.floor(h/24); return d + 'd ago';
+    }
+
+    async function fetchWithFallback(urls){
+      let lastErr;
+      for(const url of urls){
+        try{
+          const t0 = performance.now();
+          const res = await fetch(url, {cache:'no-store'});
+          if(!res.ok) throw new Error('HTTP '+res.status);
+          const data = await res.json();
+          const dt = performance.now()-t0;
+          return {data, url, t: dt};
+        }catch(err){ lastErr = err; }
+      }
+      throw lastErr || new Error('Fetch failed');
+    }
+
+    function buildLinks(item, type){
+      if(type === 'mtproto'){
+        const server = item.host, port = item.port, secret = item.secret;
+        const tg = `tg://proxy?server=${encodeURIComponent(server)}&port=${encodeURIComponent(port)}&secret=${encodeURIComponent(secret)}`;
+        const tme = `https://t.me/proxy?server=${encodeURIComponent(server)}&port=${encodeURIComponent(port)}&secret=${encodeURIComponent(secret)}`;
+        return {tg, tme};
+      } else {
+        const server = item.ip, port = item.port;
+        const tg = `tg://socks?server=${encodeURIComponent(server)}&port=${encodeURIComponent(port)}`;
+        const tme = `https://t.me/socks?server=${encodeURIComponent(server)}&port=${encodeURIComponent(port)}`;
+        return {tg, tme};
+      }
+    }
+
+    function scorePing(p){
+      if(p==null) return {cls:'', text:'—'};
+      if(p <= 80) return {cls:'good', text:p + ' ms'};
+      if(p <= 200) return {cls:'ok', text:p + ' ms'};
+      return {cls:'bad', text:p + ' ms'};
+    }
+
+    function createCard(item, type){
+      const links = buildLinks(item, type);
+      const country = item.country || 'UN';
+      const provider = item.provider || '—';
+      const ping = scorePing(item.ping);
+      const uptime = item.uptime != null ? item.uptime + '%' : '—';
+      const host = type==='mtproto' ? (item.host+':'+item.port) : (item.ip+':'+item.port);
+
+      const el = document.createElement('div');
+      el.className = 'card';
+      el.innerHTML = `
+        <div class="row">
+          <div style="display:flex;align-items:center;gap:10px;min-width:0">
+            <div style="font-size:1.4rem">${toFlagEmoji(country)}</div>
+            <div style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${host}</div>
+          </div>
+          <div style="font-size:.85rem;color:#9eb2df">${type.toUpperCase()}</div>
+        </div>
+        <div class="meta">
+          <div class="label">Country</div><div class="val">${country}</div>
+          <div class="label">Provider</div><div class="val">${provider}</div>
+          <div class="label">Ping</div><div class="val ${ping.cls}">${ping.text}</div>
+          <div class="label">Uptime</div><div class="val">${uptime}</div>
+          <div class="label">Added</div><div class="val">${tsAgo(item.addTime)}</div>
+        </div>
+        <div class="btns">
+          <a class="btn connect" href="${links.tg}" target="_blank" rel="noopener">Connect</a>
+          <button class="btn qr" data-link="${links.tme}" aria-label="Show QR">QR Code</button>
+          <button class="btn copy" data-link="${links.tme}" aria-label="Copy link">Copy</button>
+        </div>
+        <div class="hint">If <code>tg://</code> links don\'t open, use the QR or copy the <code>t.me</code> link.</div>
+      `;
+
+      // Wire buttons
+      const btnQR = el.querySelector('.btn.qr');
+      const btnCopy = el.querySelector('.btn.copy');
+      btnQR.addEventListener('click', () => showQR(btnQR.dataset.link, host));
+      btnCopy.addEventListener('click', async () => {
+        try{ await navigator.clipboard.writeText(btnCopy.dataset.link); btnCopy.textContent = 'Copied'; setTimeout(()=>btnCopy.textContent='Copy', 1200);}catch{ alert('Copy failed'); }
+      });
+
+      return el;
+    }
+
+    // --------------- Lightweight QR generator (no network, pure JS) ---------------
+    // This is a compact QR implementation that supports Byte mode, ECC level M, versions 1..20.
+    // It is intentionally small (and not feature-complete) but perfectly fine for URL payloads.
+    // Based on ISO/IEC 18004 principles — implemented from scratch for this project.
+    (function(){
+      const GF256_EXP = new Uint8Array(512), GF256_LOG = new Uint8Array(256);
+      (function initGF(){
+        let x = 1; for(let i=0;i<255;i++){ GF256_EXP[i] = x; GF256_LOG[x] = i; x <<= 1; if(x & 0x100) x ^= 0x11d; }
+        for(let i=255;i<512;i++) GF256_EXP[i] = GF256_EXP[i-255];
+      })();
+      function gfMul(a,b){ if(a===0||b===0) return 0; return GF256_EXP[GF256_LOG[a]+GF256_LOG[b]]; }
+      function polyMul(p,q){ const r=new Uint8Array(p.length+q.length-1); for(let i=0;i<p.length;i++){ for(let j=0;j<q.length;j++){ r[i+j]^=gfMul(p[i],q[j]); } } return r; }
+      function polyDiv(dividend, divisor){ dividend = dividend.slice(); for(let i=0;i<=dividend.length-divisor.length;i++){ const coef = dividend[i]; if(coef!==0){ for(let j=1;j<divisor.length;j++){ dividend[i+j] ^= gfMul(divisor[j], coef); } } } return dividend.slice(dividend.length-divisor.length+1); }
+      function rsGenPoly(ecLen){ let g = new Uint8Array([1]); for(let i=0;i<ecLen;i++){ g = polyMul(g, new Uint8Array([1, GF256_EXP[i]])); } return g; }
+
+      // Character capacities (bytes) for ECC M, versions 1..20 (Byte mode)
+      // Source: consolidated from public tables.
+      const BYTE_CAP_M = [0, 14, 26, 42, 62, 84, 106, 122, 152, 180, 213, 251, 287, 331, 362, 412, 450, 504, 560, 624, 666];
+      // EC codewords per version for ECC M; blocks grouping simplified via data table below.
+      const EC_CODEWORDS_M = [0, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26, 30, 22, 22, 24, 24, 28, 28, 26, 26, 26];
+      // Block info for ECC M (version 1..20): [group1Count, group1DataCW, group2Count, group2DataCW]
+      // Values adapted from standard tables.
+      const BLOCKS_M = [ [0,0,0,0],
+        [1,16,0,0], [1,28,0,0], [1,44,0,0], [2,32,0,0], [2,43,0,0], [4,27,0,0], [4,31,0,0], [2,38,2,39], [3,36,2,37],
+        [4,43,1,44], [1,50,4,51], [6,36,2,37], [8,37,1,38], [4,40,5,41], [5,41,5,42], [5,45,7,46], [1,46,10,47], [5,43,10,44], [9,44,0,0], [3,41,14,42]
+      ];
+
+      function encode(data){
+        // Mode Byte (0100), choose minimal version that fits
+        const bytes = new TextEncoder().encode(data);
+        let version = 1; while(version < BYTE_CAP_M.length && bytes.length > BYTE_CAP_M[version]) version++;
+        version = Math.min(version, 20); // clamp to 20
+        const size = 17 + 4*version;
+        const ecCodewords = EC_CODEWORDS_M[version];
+        const [g1, g1cw, g2, g2cw] = BLOCKS_M[version];
+
+        // Build bit stream
+        const bb = [];
+        function pushBits(val, len){ for(let i=len-1;i>=0;i--) bb.push((val>>>i)&1); }
+        pushBits(0b0100,4); // mode
+        if(version <= 9) pushBits(bytes.length, 8); else pushBits(bytes.length, 16);
+        for(const b of bytes) pushBits(b,8);
+        // Terminator
+        const totalDataCW = (g1*g1cw + g2*g2cw);
+        const totalDataBits = totalDataCW * 8;
+        for(let i=0;i<4 && bb.length<totalDataBits;i++) bb.push(0);
+        while(bb.length % 8 !== 0) bb.push(0);
+        // Pad bytes 0xEC, 0x11
+        const pads = [0xEC,0x11]; let pi = 0;
+        while(bb.length < totalDataBits){ const p = pads[pi++%2]; for(let i=7;i>=0;i--) bb.push((p>>>i)&1); }
+        // Split into blocks
+        const blocks=[]; let bi=0;
+        for(let i=0;i<g1;i++){ const arr=new Uint8Array(g1cw); for(let j=0;j<g1cw;j++){ arr[j]=bitsToByte(bb, (bi++)*8); } blocks.push(arr); }
+        for(let i=0;i<g2;i++){ const arr=new Uint8Array(g2cw); for(let j=0;j<g2cw;j++){ arr[j]=bitsToByte(bb, (bi++)*8); } blocks.push(arr); }
+        function bitsToByte(bits, idx){ let v=0; for(let i=0;i<8;i++){ v=(v<<1)|bits[idx+i]; } return v; }
+        // RS for each block
+        const gen = rsGenPoly(ecCodewords);
+        const ecBlocks = blocks.map(d => polyDiv(new Uint8Array([...d, ...new Uint8Array(ecCodewords)]), gen));
+        // Interleave data and EC codewords
+        const maxDataLen = Math.max(...blocks.map(b=>b.length));
+        const maxEcLen = ecCodewords;
+        const inter = [];
+        for(let i=0;i<maxDataLen;i++) for(const b of blocks) if(i<b.length) inter.push(b[i]);
+        for(let i=0;i<maxEcLen;i++) for(const e of ecBlocks) inter.push(e[i]);
+        // Create empty matrix
+        const m = Array.from({length:size}, ()=>Array(size).fill(null));
+        placePatterns(m, version);
+        const maskId = 0; // fixed mask 0 ( (r+c) % 2 == 0 ) — simple & effective
+        // Place data bits
+        let dirUp = true, col = size-1, row = size-1; let bitIdx=0;
+        while(col > 0){ if(col===6) col--; // skip timing column
+          for(let i=0;i<size;i++){
+            const r = dirUp ? (row - i) : i;
+            for(let k=0;k<2;k++){
+              const c = col - k; if(m[r][c] !== null) continue;
+              const bit = ((inter[Math.floor(bitIdx/8)] >> (7-bitIdx%8)) & 1) ^ mask(maskId, r, c);
+              m[r][c] = bit;
+              bitIdx++;
+            }
+          }
+          col -= 2; dirUp = !dirUp; row = dirUp ? size-1 : 0;
+        }
+        // Format & version info
+        applyFormatInfo(m, maskId, 0b01); // ECC M = 01
+        if(version>=7) applyVersionInfo(m, version);
+        return m;
+      }
+
+      function placePatterns(m, v){
+        const n = m.length;
+        // Finder patterns + separators
+        placeFinder(m,0,0); placeFinder(m,0,n-7); placeFinder(m,n-7,0);
+        // Timing patterns
+        for(let i=8;i<n-8;i++){ m[6][i] = i%2===0?1:0; m[i][6] = i%2===0?1:0; }
+        // Alignment patterns (subset for v<=20)
+        const pos = alignmentPositions(v);
+        for(let i=0;i<pos.length;i++) for(let j=0;j<pos.length;j++){
+          const r = pos[i], c = pos[j];
+          if((r===6 && (c===6||c===n-7)) || (c===6 && (r===6||r===n-7)) || (r<7&&c<7) || (r<7&&c>n-8) || (c<7&&r>n-8)) continue;
+          placeAlign(m, r-2, c-2);
+        }
+        // Reserve format info areas
+        for(let i=0;i<9;i++){ if(m[8][i]===null) m[8][i]=0; if(m[i][8]===null) m[i][8]=0; }
+        for(let i=0;i<8;i++){ if(m[n-1-i][8]===null) m[n-1-i][8]=0; if(m[8][n-1-i]===null) m[8][n-1-i]=0; }
+      }
+      function placeFinder(m,r,c){ for(let i=-1;i<=7;i++) for(let j=-1;j<=7;j++){ const R=r+i,C=c+j; if(R<0||C<0||R>=m.length||C>=m.length) continue; const on = (i>=0&&i<=6&&j>=0&&j<=6) && (i===0||i===6||j===0||j===6|| (i>=2&&i<=4&&j>=2&&j<=4)); m[R][C]=on?1:0; } }
+      function placeAlign(m,r,c){ for(let i=0;i<5;i++) for(let j=0;j<5;j++){ const on = i===0||i===4||j===0||j===4|| (i===2&&j===2); m[r+i][c+j]=on?1:0; } }
+      function alignmentPositions(v){ if(v===1) return []; const step = v===2 ? 18 : Math.ceil((17+4*v - 13)/ (v>6? (v-7)/2 + 2 : 2)); const first = 6; const last = 17+4*v - 7; const arr=[first]; let x=first; while(true){ const nx = x + step; if(nx>=last) break; arr.push(nx); x = nx; } arr.push(last); return arr; }
+      function mask(id,r,c){ switch(id){ case 0: return (r+c)%2===0?1:0; default: return 0; } }
+      function applyFormatInfo(m, maskId, ecc2){
+        // Format string: ECC (2 bits) + mask (3 bits) + BCH 15,5
+        const fmtVal = formatBCH((ecc2<<3)|maskId);
+        const n=m.length; const bits=[]; for(let i=14;i>=0;i--) bits.push((fmtVal>>i)&1);
+        // top-left around
+        for(let i=0;i<6;i++) m[8][i]=bits[i]; m[8][7]=bits[6]; m[8][8]=bits[7]; m[7][8]=bits[8]; for(let i=9;i<15;i++) m[14-i][8]=bits[i];
+        // top-right & bottom-left
+        for(let i=0;i<8;i++) m[8][n-1-i]=bits[i]; for(let i=0;i<7;i++) m[n-1-i][8]=bits[8+i];
+      }
+      function formatBCH(val){ let g = 0b10100110111; let v = val<<10; for(let i=14;i>=10;i--){ if((v>>i)&1) v ^= (g << (i-10)); } const fmt = ((val<<10)|v) ^ 0b101010000010010; return fmt; }
+      function applyVersionInfo(m, v){ const BCHpoly = 0b1111100100101; let val = v; let bch = v<<12; for(let i=17;i>=12;i--){ if((bch>>i)&1) bch ^= (BCHpoly << (i-12)); }
+        const bits = []; for(let i=17;i>=0;i--) bits.push(((v<<12|bch)>>i)&1);
+        const n=m.length; for(let i=0;i<6;i++) for(let j=0;j<3;j++){ m[i][n-11+j]=bits[i*3+j]; m[n-11+j][i]=bits[i*3+j]; }
+      }
+
+      // Render function exposed on window
+      window.drawQR = function(canvas, text){
+        const m = encode(text);
+        const n = m.length; const ctx = canvas.getContext('2d');
+        const scale = Math.floor(Math.min(canvas.width, canvas.height) / (n + 8));
+        const size = (n + 8) * scale; canvas.width = size; canvas.height = size;
+        ctx.fillStyle = '#fff'; ctx.fillRect(0,0,size,size);
+        ctx.fillStyle = '#000';
+        for(let r=0;r<n;r++) for(let c=0;c<n;c++) if(m[r][c]) ctx.fillRect((c+4)*scale,(r+4)*scale,scale,scale);
+      }
+    })();
+
+    // --------------- UI state & rendering ---------------
+    let DATA = { mtproto: [], socks: [] };
+    let currentType = 'mtproto';
+
+    async function load(type){
+      telemetry.lastType = type;
+      statusEl.textContent = 'Loading ' + type.toUpperCase() + '…';
+      try{
+        const {data, url, t} = await fetchWithFallback(API[type]);
+        telemetry.usedMirror = url.includes('raw.githubusercontent.com');
+        DATA[type] = Array.isArray(data) ? data : (data.list || data.items || data); // be flexible
+        statusEl.textContent = `Loaded ${DATA[type].length} ${type.toUpperCase()} in ${formatMs(t)} ${telemetry.usedMirror?'(mirror)':''}`;
+        render();
+      }catch(err){
+        statusEl.innerHTML = `<span style="color:#ff8a8a">Failed to load ${type.toUpperCase()}</span> — ${err}`;
+        gridEl.innerHTML = `<div class="empty">Could not fetch the API. Try again or switch tab.</div>`;
+      }
+    }
+
+    function filteredAndSorted(){
+      const term = qInput.value.trim().toLowerCase();
+      const list = (DATA[currentType]||[]).filter(x=>{
+        const hay = [x.country, x.provider, x.host, x.ip, x.port, x.secret].filter(Boolean).join(' ').toLowerCase();
+        return hay.includes(term);
+      });
+      const how = sortSel.value;
+      list.sort((a,b)=>{
+        if(how==='ping') return (a.ping??1e9) - (b.ping??1e9);
+        if(how==='uptime') return (b.uptime??-1) - (a.uptime??-1);
+        if(how==='recent') return (b.addTime??0) - (a.addTime??0);
+        return 0;
+      });
+      return list.slice(0, 360); // keep it snappy
+    }
+
+    function render(){
+      gridEl.innerHTML = '';
+      const list = filteredAndSorted();
+      if(!list.length){ gridEl.innerHTML = '<div class="empty">No results. Try clearing filters.</div>'; return; }
+      const frag = document.createDocumentFragment();
+      for(const item of list){ frag.appendChild(createCard(item, currentType)); }
+      gridEl.appendChild(frag);
+    }
+
+    // --------------- QR dialog wiring ---------------
+    const qrDlg = document.getElementById('qr');
+    const qrCanvas = document.getElementById('qrc');
+    document.getElementById('qrclose').onclick = () => qrDlg.close();
+    document.getElementById('qrcopy').onclick = async () => {
+      const link = qrDlg.dataset.link || '';
+      try{ await navigator.clipboard.writeText(link); alert('Link copied to clipboard'); }catch{ alert('Copy failed'); }
+    };
+    function showQR(link, title){
+      qrDlg.dataset.link = link;
+      document.getElementById('qrtitle').textContent = 'QR — ' + title;
+      document.getElementById('qrhint').textContent = link;
+      drawQR(qrCanvas, link);
+      if(typeof qrDlg.showModal === 'function') qrDlg.showModal(); else qrDlg.setAttribute('open','');
+    }
+
+    // --------------- Event listeners ---------------
+    tabMt.addEventListener('click', ()=>{ tabMt.setAttribute('aria-pressed','true'); tabSocks.setAttribute('aria-pressed','false'); currentType='mtproto'; render(); if(!DATA.mtproto.length) load('mtproto'); });
+    tabSocks.addEventListener('click', ()=>{ tabMt.setAttribute('aria-pressed','false'); tabSocks.setAttribute('aria-pressed','true'); currentType='socks'; render(); if(!DATA.socks.length) load('socks'); });
+    qInput.addEventListener('input', ()=>{ render(); });
+    sortSel.addEventListener('change', ()=>{ render(); });
+    document.getElementById('refresh').addEventListener('click', ()=> load(currentType));
+
+    // --------------- Initial load ---------------
+    load('mtproto');
+  </script>
+</body>
+</html>
