@@ -429,7 +429,7 @@
 
     <section id="panel-sk" role="tabpanel" aria-labelledby="tab-sk" hidden>
       <div id="sk-grid" class="grid" aria-live="polite"></div>
-      <div id="sk-empty" class="empty" hidden>Loading…</div>
+      <div id="sk-empty" class="empty" hidden></div>
       <div id="sk-error" class="error" hidden></div>
     </section>
 
@@ -456,7 +456,24 @@
   </dialog>
 
   <!-- Lightweight QR generator (client-side only) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha512-WH8GZ5bZx3QHkJQHjI7rHc8tYlCw0e+qucQ9m8m9iX1b3n0A1dM2mW2oV1w1wzYV3wh8tU8zjE9M7x1QG6H3eg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <!-- SRI حذف شد تا بلاک نشود -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+  <!-- فالبک: اگر CDN بالا لود نشد، از jsDelivr تلاش کن -->
+  <script>
+    (function ensureQRCodeLoadedOnce(){
+      function present(){ return !!(window.QRCode && window.QRCode.CorrectLevel); }
+      if (present()) return;
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js';
+      s.async = true;
+      s.setAttribute('data-qr-fallback','1');
+      s.onload = function(){ console.log('QRCode fallback loaded'); };
+      s.onerror = function(){ console.error('QR fallback load failed'); };
+      document.head.appendChild(s);
+    })();
+  </script>
+
   <script>
   (function(){
     // ---- DOM handles
@@ -705,12 +722,54 @@
       render();
     }
 
-    function showQR(link){
+    // ======= QR: نسخهٔ بهبود‌یافته با گارد و فالبک =======
+    async function showQR(link){
       qrBox.innerHTML='';
-      new QRCode(qrBox, {text: link, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M});
+      qrLinkP.textContent='';
+
+      const present = () => !!(window.QRCode && window.QRCode.CorrectLevel);
+
+      // اگر QRCode حاضر نیست، سعی کن منتظر بمانی (فالبک اسکریپت بالایی تزریق دارد)
+      if (!present()) {
+        // اگر هنوز اسکریپت فالبک تزریق نشده بود، تزریق کن
+        if (!document.querySelector('script[data-qr-fallback]')) {
+          const s = document.createElement('script');
+          s.src = 'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js';
+          s.async = true;
+          s.setAttribute('data-qr-fallback','1');
+          document.head.appendChild(s);
+        }
+        // تا 3 ثانیه هر 120ms چک کن
+        const ok = await new Promise(resolve=>{
+          let waited=0;
+          const iv = setInterval(()=>{
+            if (present()) { clearInterval(iv); resolve(true); }
+            else if ((waited+=120) >= 3000) { clearInterval(iv); resolve(false); }
+          },120);
+        });
+        if (!ok) {
+          alert('QR library failed to load (CDN blocked or offline).');
+          return;
+        }
+      }
+
+      try{
+        new QRCode(qrBox, {
+          text: link,
+          width: 220,
+          height: 220,
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      }catch(e){
+        console.error('QR build error:', e);
+        alert('Failed to build QR code. See console for details.');
+        return;
+      }
+
       qrLinkP.textContent = link;
-      qrDlg.showModal();
+      if (qrDlg.showModal) qrDlg.showModal(); else qrDlg.setAttribute('open','');
     }
+    // ================================================
 
     qrClose.addEventListener('click',()=>qrDlg.close());
     qrCopy.addEventListener('click',()=>{const t=qrLinkP.textContent; navigator.clipboard?.writeText(t); qrCopy.textContent='Copied'; setTimeout(()=>qrCopy.textContent='Copy link',1400)});
