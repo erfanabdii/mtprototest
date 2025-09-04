@@ -11,6 +11,7 @@
        ========================= */
     :root{
       /* core palette */
+      --title-fg: #0b1220;            /* dark */
       --bg:#0b0f14;
       --bg-elev:#0e141b;
       --card:#121821;
@@ -56,6 +57,7 @@
         --bg:#f7fafc; --bg-elev:#ffffff; --card:#ffffff;
         --chip:#f3f5f9; --chip-fg:#334155; --chip-border:#d9e0ea;
         --text:#0b1220; --muted:#5b6474; --muted-strong:#4a5568;
+        --title-fg: #eaf6ff;           /* light */
 
         /* high-contrast chips (light) */
         --ok-bg:#e7f9ee; --ok-fg:#116b2e; --ok-bd:#b6e7c7;
@@ -104,6 +106,12 @@
     }
     header > *{ width:var(--container); margin-inline:auto; }
     h1{font-size:clamp(20px,2.4vw,24px);margin:0;letter-spacing:.2px}
+    header h1 {
+      color: var(--title-fg);   /* use your new theme variable */
+      font-weight: 800;         /* optional polish */
+      letter-spacing: .1px;     /* optional polish */
+    }
+
     .sub{color:var(--muted-strong);font-size:13px}
     header .sub{ color:#d9e3f1 }
 
