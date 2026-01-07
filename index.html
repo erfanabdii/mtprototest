@@ -16,57 +16,36 @@
         :root {
             /* Default: Dark Industrial (Charcoal & Graphite) */
             --bg-base: #141414;
-            /* Deep Matte Charcoal */
             --bg-surface: #1f1f1f;
-            /* Graphite card background */
             --bg-panel: #2a2a2a;
-            /* Lighter panel */
-
             --border-primary: #333333;
-            /* Dark Grey border */
             --border-strong: #000000;
-            /* Black border */
-
             --text-primary: #e0e0e0;
-            /* Off-white */
             --text-secondary: #a0a0a0;
-            /* Grey */
             --text-muted: #666666;
-
             --accent-primary: #ffffff;
-            /* White accents */
             --accent-secondary: #ff9100;
-            /* Industrial Orange (Brighter) */
             --accent-tertiary: #66bb6a;
-            /* Soft Green */
-
             --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
             --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
             --shadow-hover: 4px 4px 0px rgba(0, 0, 0, 0.8);
-            /* Deep hard shadow */
-
-            /* Typography */
             --font-display: 'Outfit', sans-serif;
             --font-mono: 'JetBrains Mono', monospace;
         }
 
         [data-theme="light"] {
-            /* Light Industrial (Limestone & Ink) */
+            /* Light Industrial */
             --bg-base: #f4f3ef;
             --bg-surface: #ffffff;
             --bg-panel: #eae8e3;
-
             --border-primary: #dcdad5;
             --border-strong: #000000;
-
             --text-primary: #121212;
             --text-secondary: #5e5c59;
             --text-muted: #969490;
-
             --accent-primary: #2d3436;
             --accent-secondary: #e65100;
             --accent-tertiary: #2e7d32;
-
             --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
             --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
             --shadow-hover: 4px 4px 0px rgba(0, 0, 0, 1);
@@ -138,7 +117,6 @@
             height: 14px;
             background: var(--accent-secondary);
             border-radius: 2px;
-            /* Slightly squared */
         }
 
         /* CONTROLS */
@@ -293,7 +271,9 @@
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
             gap: 1.5rem;
-            padding: 0 5% 4rem;
+            padding: 0 5%;
+            /* Removed bottom padding to handle it via spacer */
+            margin-bottom: 4rem;
         }
 
         .card {
@@ -304,15 +284,17 @@
             display: flex;
             flex-direction: column;
             gap: 1.25rem;
-            transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+            transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.2s, border-color 0.2s;
             position: relative;
+            /* Fixed height is crucial for simple Virtual Scroll math */
+            height: 200px;
+            contain: content;
         }
 
         .card:hover {
             transform: translateY(-4px);
             border-color: var(--text-primary);
             box-shadow: var(--shadow-hover);
-            /* Hard shadow on hover */
         }
 
         .card-header {
@@ -485,7 +467,7 @@
             background: linear-gradient(90deg, var(--bg-panel) 25%, var(--bg-surface) 50%, var(--bg-panel) 75%);
             background-size: 200% 100%;
             border-radius: 12px;
-            height: 220px;
+            height: 200px;
             animation: pulse 1.5s infinite linear;
         }
 
@@ -670,9 +652,14 @@
             mir_sk: 'https://raw.githubusercontent.com/hookzof/socks5_list/master/tg/socks.json'
         };
 
+        const CARD_HEIGHT = 200; // Fixed height in CSS
+        const GAP = 24; // 1.5rem = 24px
+        const BUFFER_ROWS = 2; // Rows up/down to keep rendered
+
         let state = {
-            currentTab: 'mt', // 'mt' or 'sk'
-            data: [],
+            currentTab: 'mt',
+            allData: [],
+            filteredData: [],
             countries: new Set(),
             filter: {
                 search: '',
@@ -689,6 +676,109 @@
         const statusText = document.getElementById('statusText');
         const toast = document.getElementById('toast');
         const themeBtn = document.getElementById('themeBtn');
+        const qrDialog = document.getElementById('qrDialog');
+        const qrBox = document.getElementById('qrBox');
+
+        // --- VIRTUALIZATION ENGINE ---
+
+        let virtState = {
+            cols: 1,
+            visibleRows: 0,
+            scrollTop: 0
+        };
+
+        function updateVirtualGeometry() {
+            // Calculate dynamic columns based on grid width & minmax(300px)
+            // CSS: grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            const gridWidth = grid.clientWidth;
+            // Min card width (300) + gap (24). 
+            // Note: This is an approximation. If width < 300, it's 1 col.
+            let c = Math.floor((gridWidth + GAP) / (300 + GAP));
+            virtState.cols = c > 0 ? c : 1;
+
+            // Calculate how many rows fit in viewport
+            virtState.visibleRows = Math.ceil(window.innerHeight / (CARD_HEIGHT + GAP)) + 1;
+
+            renderVirtualBatch();
+        }
+
+        function renderVirtualBatch() {
+            if (state.filteredData.length === 0) return;
+
+            const totalRows = Math.ceil(state.filteredData.length / virtState.cols);
+
+            // Current Scroll Position
+            const scrollTop = window.scrollY || document.documentElement.scrollTop;
+            const gridOffset = grid.offsetTop; // Offset from top of page
+            const relativeScroll = Math.max(0, scrollTop - gridOffset);
+
+            // Which row is at the top?
+            const startRow = Math.floor(relativeScroll / (CARD_HEIGHT + GAP));
+
+            // Start/End indices
+            const renderStartRow = Math.max(0, startRow - BUFFER_ROWS);
+            const renderEndRow = Math.min(totalRows, startRow + virtState.visibleRows + BUFFER_ROWS);
+
+            const startIndex = renderStartRow * virtState.cols;
+            const endIndex = Math.min(state.filteredData.length, renderEndRow * virtState.cols);
+
+            // Padding Logic to simulate full height
+            const paddingTop = renderStartRow * (CARD_HEIGHT + GAP);
+            const paddingBottom = (totalRows - renderEndRow) * (CARD_HEIGHT + GAP);
+
+            grid.style.paddingTop = `${paddingTop}px`;
+            grid.style.paddingBottom = `${paddingBottom}px`;
+
+            // Render Items
+            const batch = state.filteredData.slice(startIndex, endIndex);
+
+            // IMPORTANT: Diffing/Keying could be better, but innerHTML is simpler for vanilla
+            // Using a persistent fragment to reduce jumping
+            const fragment = document.createDocumentFragment();
+
+            batch.forEach((p) => {
+                const card = createCard(p);
+                fragment.appendChild(card);
+            });
+
+            grid.innerHTML = '';
+            grid.appendChild(fragment);
+        }
+
+        function createCard(p) {
+            const card = document.createElement('div');
+            card.className = 'card';
+
+            const links = state.currentTab === 'mt' ? getMTLinks(p) : getSKLinks(p);
+            const pingClass = p.ping < 100 ? 'ping' : (p.ping < 250 ? 'ping warn' : 'ping bad');
+            const flag = getFlagEmoji(p.country_code || 'XX');
+
+            card.innerHTML = `
+                <div class="card-header">
+                    <div class="flag" title="${p.country || 'Unknown'}">${flag}</div>
+                    <div class="metrics">
+                        <span class="badge ${pingClass}">${p.ping}ms</span>
+                        <span class="badge" style="background: var(--bg-panel); color: var(--text-secondary)">${p.uptime ? p.uptime + '%' : '99%'} UP</span>
+                    </div>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">HOST</span>
+                    <code class="host">${p.host}:${p.port}</code>
+                </div>
+                <div class="card-actions">
+                    <a href="${links.tg}" class="btn-connect" style="text-decoration: none; display: flex; align-items: center; border-radius: 8px;">CONNECT</a>
+                    <div style="display:flex; gap:5px;">
+                        <button class="btn-icon" data-qr="${links.tg}" title="QR Code">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h7v7H3z"/><path d="M14 3h7v7h-7z"/><path d="M14 14h7v7h-7z"/><path d="M3 14h7v7H3z"/></svg>
+                        </button>
+                        <button class="btn-icon" data-copy="${links.tme}" title="Copy Link">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                        </button>
+                    </div>
+                </div>
+            `;
+            return card;
+        }
 
         // --- CORE FUNCTIONS ---
 
@@ -706,15 +796,15 @@
                 if (!res.ok) throw new Error('Network failure');
 
                 let json = await res.json();
-                state.data = json.map(p => ({
+                state.allData = json.map(p => ({
                     ...p,
                     ping: p.ping || Math.floor(Math.random() * 200) + 50, // Mock ping if missing
                     uptime: p.uptime || Math.floor(Math.random() * 20) + 80 // Mock uptime if missing
                 }));
 
                 extractCountries();
-                render();
-                statusText.innerHTML = `<span class="status-dot"></span> ${state.data.length} Nodes Active • Last Sync: ${new Date().toLocaleTimeString()}`;
+                applyFilters(); // Initial filter & render
+                statusText.innerHTML = `<span class="status-dot"></span> ${state.allData.length} Nodes Active • Last Sync: ${new Date().toLocaleTimeString()}`;
             } catch (e) {
                 console.error(e);
                 statusText.innerHTML = `<span class="status-dot" style="background: var(--accent-secondary)"></span> Sync Failed. Retrying...`;
@@ -726,11 +816,12 @@
 
         function extractCountries() {
             state.countries.clear();
-            state.data.forEach(p => {
+            state.allData.forEach(p => {
                 if (p.country) state.countries.add(p.country);
             });
 
             // Populate Dropdown
+            const currentVal = countryFilter.value;
             countryFilter.innerHTML = '<option value="">All Regions</option>';
             Array.from(state.countries).sort().forEach(c => {
                 const opt = document.createElement('option');
@@ -738,12 +829,12 @@
                 opt.textContent = c;
                 countryFilter.appendChild(opt);
             });
+            countryFilter.value = state.countries.has(currentVal) ? currentVal : "";
         }
 
-        function filterAndSortData() {
-            let res = [...state.data];
+        function applyFilters() {
+            let res = [...state.allData];
 
-            // Search Filter
             if (state.filter.search) {
                 const q = state.filter.search.toLowerCase();
                 res = res.filter(p =>
@@ -753,79 +844,24 @@
                 );
             }
 
-            // Country Filter
             if (state.filter.country) {
                 res = res.filter(p => p.country === state.filter.country);
             }
 
-            // Sorting
             res.sort((a, b) => {
                 if (state.filter.sort === 'ping') return (a.ping || 999) - (b.ping || 999);
                 if (state.filter.sort === 'uptime') return (b.uptime || 0) - (a.uptime || 0);
-                // newest assumption: items are appended, so index order reverse ? 
-                // Using mock 'added' logic or simple reverse
+                if (state.filter.sort === 'newest') return 0;
                 return 0;
             });
 
-            return res;
-        }
+            state.filteredData = res;
 
-        function render() {
-            const filtered = filterAndSortData();
+            // Full Reset
             grid.innerHTML = '';
-
-            filtered.forEach((p, idx) => {
-                const card = document.createElement('div');
-                card.className = 'card';
-                card.style.animation = `fade-in 0.5s ease-out forwards ${Math.min(idx * 0.05, 1)}s`;
-                card.style.opacity = '0'; // For animation
-
-                // Links
-                const links = state.currentTab === 'mt'
-                    ? getMTLinks(p)
-                    : getSKLinks(p);
-
-                const pingClass = p.ping < 100 ? 'ping' : (p.ping < 250 ? 'ping warn' : 'ping bad');
-                const flag = getFlagEmoji(p.country_code || 'XX');
-
-                card.innerHTML = `
-                    <div class="card-header">
-                        <div class="flag" title="${p.country || 'Unknown'}">${flag}</div>
-                        <div class="metrics">
-                            <span class="badge ${pingClass}">
-                                ${p.ping}ms
-                            </span>
-                            <span class="badge" style="background: var(--bg-panel); color: var(--text-secondary)">
-                                ${p.uptime ? p.uptime + '%' : '99%'} UP
-                            </span>
-                        </div>
-                    </div>
-                    
-                    <div class="info-row">
-                        <span class="info-label">HOST</span>
-                        <code class="host">${p.host}:${p.port}</code>
-                    </div>
-
-                    <div class="card-actions">
-                        <a href="${links.tg}" class="btn-connect" style="text-decoration: none; display: flex; align-items: center; border-radius: 8px;">
-                            CONNECT
-                        </a>
-                        <div style="display:flex; gap:5px;">
-                            <button class="btn-icon" onclick="showQR('${links.tg}')" title="QR Code">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h7v7H3z"/><path d="M14 3h7v7h-7z"/><path d="M14 14h7v7h-7z"/><path d="M3 14h7v7H3z"/></svg>
-                            </button>
-                            <button class="btn-icon" onclick="copyLink('${links.tme}')" title="Copy Link">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                            </button>
-                        </div>
-                    </div>
-                `;
-                grid.appendChild(card);
-            });
-
-            if (filtered.length === 0) {
-                grid.innerHTML = `<div style="text-align:center; grid-column: 1/-1; padding: 4rem; color: var(--text-muted)">NO SIGNAL DETECTED</div>`;
-            }
+            grid.style.paddingTop = '0px';
+            grid.style.paddingBottom = '0px';
+            updateVirtualGeometry();
         }
 
         // --- HELPERS ---
@@ -833,26 +869,17 @@
         function getMTLinks(p) {
             const secret = p.secret || '';
             const q = `server=${p.host}&port=${p.port}&secret=${secret}`;
-            return {
-                tg: `tg://proxy?${q}`,
-                tme: `https://t.me/proxy?${q}`
-            };
+            return { tg: `tg://proxy?${q}`, tme: `https://t.me/proxy?${q}` };
         }
 
         function getSKLinks(p) {
             const q = `server=${p.host}&port=${p.port}${p.user ? `&user=${p.user}&pass=${p.pass}` : ''}`;
-            return {
-                tg: `tg://socks?${q}`,
-                tme: `https://t.me/socks?${q}`
-            };
+            return { tg: `tg://socks?${q}`, tme: `https://t.me/socks?${q}` };
         }
 
         function getFlagEmoji(cc) {
             if (!cc || cc === 'XX') return '🌐';
-            const codePoints = cc
-                .toUpperCase()
-                .split('')
-                .map(char => 127397 + char.charCodeAt());
+            const codePoints = cc.toUpperCase().split('').map(char => 127397 + char.charCodeAt());
             return String.fromCodePoint(...codePoints);
         }
 
@@ -862,7 +889,29 @@
             }
         }
 
-        // --- THEME & REFRESH ---
+        function debounce(func, wait) {
+            let timeout;
+            return function (...args) {
+                const context = this;
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(context, args), wait);
+            };
+        }
+
+        // --- GLOBAL UI HANDLERS ---
+
+        grid.addEventListener('click', (e) => {
+            const copyBtn = e.target.closest('[data-copy]');
+            if (copyBtn) {
+                copyLink(copyBtn.dataset.copy);
+                return;
+            }
+            const qrBtn = e.target.closest('[data-qr]');
+            if (qrBtn) {
+                showQR(qrBtn.dataset.qr);
+                return;
+            }
+        });
 
         function toggleTheme() {
             const current = document.body.getAttribute('data-theme');
@@ -874,33 +923,24 @@
 
         function updateThemeIcon(theme) {
             const isLight = theme === 'light';
-            // Sun for light, Moon for dark
             themeBtn.innerHTML = isLight
                 ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>'
                 : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
         }
 
-        // --- INTERACTIONS ---
-
         function switchTab(t) {
             state.currentTab = t;
             document.querySelectorAll('header button:not(.theme-toggle)').forEach(b => b.classList.remove('active'));
             document.getElementById(`tab-${t}`).classList.add('active');
-
-            // Reset filters
             state.filter.search = '';
             searchInput.value = '';
-
             fetchProxies();
         }
 
         function showQR(link) {
-            const diag = document.getElementById('qrDialog');
-            const box = document.getElementById('qrBox');
             document.getElementById('qrLinkText').textContent = link;
-
-            box.innerHTML = '';
-            new QRCode(box, {
+            qrBox.innerHTML = '';
+            new QRCode(qrBox, {
                 text: link,
                 width: 200,
                 height: 200,
@@ -908,8 +948,7 @@
                 colorLight: "#ffffff",
                 correctLevel: QRCode.CorrectLevel.H
             });
-
-            diag.showModal();
+            qrDialog.showModal();
         }
 
         function copyLink(link) {
@@ -921,28 +960,33 @@
 
         // --- EVENT LISTENERS ---
 
-        searchInput.addEventListener('input', (e) => {
-            state.filter.search = e.target.value;
-            render();
-        });
+        const handleSearch = debounce((e) => {
+            state.filter.search = e.target.value.trim();
+            applyFilters();
+        }, 300);
+
+        searchInput.addEventListener('input', handleSearch);
 
         countryFilter.addEventListener('change', (e) => {
             state.filter.country = e.target.value;
-            render();
+            applyFilters();
         });
 
         sortFilter.addEventListener('change', (e) => {
             state.filter.sort = e.target.value;
-            render();
+            applyFilters();
         });
 
-        // Keybindings
         document.addEventListener('keydown', (e) => {
             if (e.key === '/' && document.activeElement !== searchInput) {
                 e.preventDefault();
                 searchInput.focus();
             }
         });
+
+        // Virtual Scroll Listeners
+        window.addEventListener('scroll', updateVirtualGeometry);
+        window.addEventListener('resize', debounce(updateVirtualGeometry, 150));
 
         // Add fade-in keyframes
         const style = document.createElement('style');
@@ -955,14 +999,11 @@
         document.head.appendChild(style);
 
         // --- INIT ---
-
-        // Load Theme
-        const savedTheme = localStorage.getItem('theme') || 'dark'; // Default to dark
+        const savedTheme = localStorage.getItem('theme') || 'dark';
         document.body.setAttribute('data-theme', savedTheme);
         updateThemeIcon(savedTheme);
 
         fetchProxies();
-
     </script>
 </body>
 
